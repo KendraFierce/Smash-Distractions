@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Distraction Smash</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #05080c; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        #game-container { position: relative; width: 100%; height: 100%; overflow: hidden; }
+        canvas { display: block; width: 100%; height: 100%; }
+
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(5, 10, 25, 0.95); z-index: 100; text-align: center; color: #fff; }
+        #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 10; display: none; }
+        #score-box { font-size: 18px; font-weight: 900; color: #00ffcc; text-shadow: 0 0 10px #00ffcc; }
+        #timer { position: absolute; top: 20px; right: 20px; font-size: 24px; font-weight: 900; color: #ff3366; z-index: 10; display: none; }
+        
+        button { background: #00ffcc; border: none; padding: 18px 40px; font-size: 20px; cursor: pointer; border-radius: 50px; margin-top: 20px; font-weight: bold; color: #05080c; text-transform: uppercase; }
+        button:disabled { background: #334; color: #777; cursor: not-allowed; box-shadow: none; }
+        
+        h1 { font-size: 28px; color: #00ffcc; margin: 0; text-shadow: 0 0 15px #00ffcc; }
+        .rank-box { margin: 15px 0; padding: 15px; border-top: 1px solid rgba(255,255,255,0.1); border-bottom: 1px solid rgba(255,255,255,0.1); }
+        #next-lvl { font-size: 14px; opacity: 0.7; margin-top: 5px; color: #ffcc00; }
+        #streak-info { color: #ffcc00; font-size: 14px; margin-top: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- Start Screen -->
+        <div id="start-screen" class="overlay">
+            <h1>DISTRACTION SMASH</h1>
+            <p id="start-msg" style="opacity: 0.8; max-width: 300px; margin-top:10px;">Stabilize your mental orbit.</p>
+            <button id="start-btn" onclick="startGame()">Calibrate Focus</button>
+        </div>
+
+        <div id="ui">
+            <div id="score-box">STABILITY: <span id="score">50</span></div>
+            <div id="streak-info">STREAK: <span id="streak-count">0</span>/15</div>
+        </div>
+        <div id="timer">60s</div>
+        
+        <!-- Results Screen -->
+        <div id="results-screen" class="overlay" style="display: none;">
+            <h1 id="status-text">ORBIT STABILIZED</h1>
+            <div class="rank-box">
+                <p style="margin:0; font-size: 14px; opacity: 0.8;">FINAL SCORE</p>
+                <div id="finalScore" style="font-size: 48px; font-weight: 900; color: #00ffcc;">0</div>
+                <div id="rank-display" style="font-size: 24px; font-weight: bold; text-transform: uppercase;"></div>
+                <div id="next-lvl"></div>
+            </div>
+            <p style="opacity: 0.6; font-size: 12px; padding: 0 40px;">Daily mission complete. Return tomorrow for further training.</p>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+<script>
+const canvas = document.getElementById('gameCanvas'), ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score'), timerEl = document.getElementById('timer'), ui = document.getElementById('ui');
+const startScreen = document.getElementById('start-screen'), resultsScreen = document.getElementById('results-screen');
+const streakCountEl = document.getElementById('streak-count'), streakInfo = document.getElementById('streak-info');
+const startBtn = document.getElementById('start-btn'), startMsg = document.getElementById('start-msg');
+
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize);
+resize();
+
+let score = 50, timeLeft = 60, gameActive = false, difficulty = 1;
+let bullets = [], enemies = [], stars = [], hitEffect = 0;
+let streak = 0, isHyper = false;
+
+// --- DAILY LOCK LOGIC ---
+const lastPlayed = localStorage.getItem('smash_last_played');
+const today = new Date().toDateString();
+
+if (lastPlayed === today) {
+    startBtn.disabled = true;
+    startBtn.innerText = "System Recharging";
+    startMsg.innerText = "Neural pathway closed for maintenance. Come back tomorrow!";
+}
+
+for(let i=0; i<80; i++) stars.push({ x: Math.random()*2000, y: Math.random()*2000, s: 1 + Math.random()*3 });
+
+const player = { x: window.innerWidth / 2, y: 0, w: 80, h: 50 };
+const enemyTypes = [{ label: '☄️', p: 10, penalty: 15 }, { label: '📱', p: 20, penalty: 20 }, { label: '🔔', p: 10, penalty: 10 }];
+
+const ranks = [
+    { name: "Cosmic Wanderer", min: 0 },
+    { name: "Stellar Scout", min: 150 },
+    { name: "Plasma Pilot", min: 400 },
+    { name: "Galactic Guardian", min: 750 },
+    { name: "Supernova Sage", min: 1200 }
+];
+
+function startGame() {
+    localStorage.setItem('smash_last_played', today); // Lock for the day
+    startScreen.style.display = 'none';
+    ui.style.display = 'block';
+    timerEl.style.display = 'block';
+    gameActive = true;
+    spawnEnemy(); spawnBullet(); startTimer();
+}
+
+function spawnBullet() {
+    if (!gameActive) return;
+    bullets.push({ x: player.x - 3, y: player.y - 20, w: 6, h: 25 });
+    setTimeout(spawnBullet, isHyper ? 80 : 250);
+}
+
+function spawnEnemy() {
+    if (!gameActive) return;
+    const type = enemyTypes[Math.floor(Math.random() * 3)];
+    enemies.push({ x: Math.random() * (canvas.width - 40), y: -50, speed: (4 + Math.random() * 3) * (isHyper ? 2 : difficulty), type: type });
+    setTimeout(spawnEnemy, 850 / (isHyper ? 2 : difficulty));
+}
+
+function activateHyper() {
+    isHyper = true;
+    streakInfo.innerText = "NEURAL STREAK ACTIVE!";
+    streakInfo.style.color = "#fff";
+    setTimeout(() => { 
+        isHyper = false; 
+        streak = 0; 
+        streakInfo.innerHTML = 'STREAK: <span id="streak-count">0</span>/15';
+        streakInfo.style.color = "#ffcc00";
+    }, 5000);
+}
+
+function startTimer() {
+    const clock = setInterval(() => {
+        if(!gameActive) return;
+        timeLeft--;
+        timerEl.innerText = timeLeft + "s";
+        if (timeLeft % 10 === 0) difficulty += 0.2;
+        if (timeLeft <= 0) { clearInterval(clock); endGame(); }
+    }, 1000);
+}
+
+function endGame() {
+    gameActive = false;
+    ui.style.display = 'none';
+    timerEl.style.display = 'none';
+    const info = getRankInfo(score);
+    document.getElementById('finalScore').innerText = score;
+    document.getElementById('rank-display').innerText = info.current.name;
+    document.getElementById('next-lvl').innerText = info.next ? `+${info.next.min - score} to reach ${info.next.name}` : "MAX RANK ACHIEVED";
+    resultsScreen.style.display = 'flex';
+}
+
+function getRankInfo(s) {
+    let current = ranks[0];
+    let next = null;
+    for (let i = 0; i < ranks.length; i++) {
+        if (s >= ranks[i].min) current = ranks[i];
+        if (s < ranks[i].min) { next = ranks[i]; break; }
+    }
+    return { current, next };
+}
+
+window.addEventListener('mousemove', (e) => { if(gameActive) player.x = e.clientX; });
+window.addEventListener('touchmove', (e) => { if(gameActive) { e.preventDefault(); player.x = e.touches[0].clientX; } }, {passive: false});
+
+function draw() {
+    ctx.fillStyle = '#05080c';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    player.y = canvas.height - 80;
+
+    stars.forEach(s => {
+        s.y += isHyper ? s.s * 8 : s.s; if(s.y > canvas.height) s.y = 0;
+        ctx.fillStyle = '#fff'; ctx.fillRect(s.x % canvas.width, s.y, 1.5, 1.5);
+    });
+
+    if(!gameActive) { requestAnimationFrame(draw); return; }
+
+    bullets.forEach((b, i) => {
+        b.y -= 15; ctx.fillStyle = isHyper ? '#ffcc00' : '#00ffcc';
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        if (b.y < -30) bullets.splice(i, 1);
+    });
+
+    enemies.forEach((e, i) => {
+        e.y += e.speed; ctx.font = '40px Arial'; ctx.fillText(e.type.label, e.x, e.y);
+
+        if (Math.hypot(e.x - player.x, e.y - player.y) < 45) {
+            score -= e.type.penalty; hitEffect = 10; streak = 0;
+            enemies.splice(i, 1); if (score <= 0) { score = 0; endGame(); }
+        }
+
+        bullets.forEach((b, bi) => {
+            if (b.x < e.x + 40 && b.x + b.w > e.x && b.y < e.y && b.y + b.h > e.y - 30) {
+                score += e.type.p; 
+                if(!isHyper) {
+                    streak++;
+                    if (streak >= 15) activateHyper();
+                }
+                enemies.splice(i, 1); bullets.splice(bi, 1);
+            }
+        });
+        if (e.y > canvas.height + 50) { enemies.splice(i, 1); streak = 0; }
+    });
+
+    ctx.save(); ctx.translate(player.x, player.y);
+    let color = isHyper ? '#ffcc00' : (hitEffect > 0 ? '#ff3366' : '#00ffcc');
+    if(hitEffect > 0) hitEffect--;
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(0, 5, 45, 18, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(200, 255, 255, 0.4)'; ctx.beginPath(); ctx.arc(0, -5, 22, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = '#32cd32'; ctx.beginPath(); ctx.ellipse(0, -10, 9, 13, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(-4, -12, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(4, -12, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    scoreEl.innerText = score;
+    if(!isHyper) document.getElementById('streak-count').innerText = streak;
+    requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body>
+</html>
