@@ -5,40 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Distraction Smash</title>
     <style>
-        /* Body centers the game and allows scrolling by default */
-        body, html { 
-            margin: 0; 
-            padding: 0; 
-            width: 100%; 
-            min-height: 100%; 
-            background: #000; 
-            font-family: 'Segoe UI', sans-serif; 
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-        }
-
-        /* This class locks the screen only while playing */
-        body.playing {
-            overflow: hidden;
-            height: 100vh;
-            touch-action: none;
-        }
-
-        /* Fixed Game Container Size: 1080 x 1400 */
-        #game-container { 
-            position: relative; 
-            width: 1080px; 
-            height: 1400px; 
-            overflow: hidden; 
-            background: #05080c;
-            /* Ensures it doesn't break small screens */
-            max-width: 100vw;
-            max-height: 100vh;
-            flex-shrink: 0;
-        }
-
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #05080c; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        #game-container { position: relative; width: 100%; height: 100%; overflow: hidden; }
         canvas { display: block; width: 100%; height: 100%; }
 
         .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(5, 10, 25, 0.95); z-index: 100; text-align: center; color: #fff; }
@@ -53,17 +21,9 @@
         .rank-box { margin: 15px 0; padding: 15px; border-top: 1px solid rgba(255,255,255,0.1); border-bottom: 1px solid rgba(255,255,255,0.1); }
         #next-lvl { font-size: 14px; opacity: 0.7; margin-top: 5px; color: #ffcc00; }
         #streak-info { color: #ffcc00; font-size: 14px; margin-top: 5px; font-weight: bold; }
-
-        /* Added a spacer to demonstrate scrolling after game ends */
-        .content-after {
-            color: white;
-            padding: 50px;
-            text-align: center;
-        }
     </style>
 </head>
 <body>
-
     <div id="game-container">
         <!-- Start Screen -->
         <div id="start-screen" class="overlay">
@@ -87,15 +47,10 @@
                 <div id="rank-display" style="font-size: 24px; font-weight: bold; text-transform: uppercase;"></div>
                 <div id="next-lvl"></div>
             </div>
-            <p style="opacity: 0.6; font-size: 12px; padding: 0 40px;">Daily mission complete. Scroll down to explore more.</p>
+            <p style="opacity: 0.6; font-size: 12px; padding: 0 40px;">Daily mission complete. Return tomorrow for further training.</p>
         </div>
 
         <canvas id="gameCanvas"></canvas>
-    </div>
-
-    <div class="content-after">
-        <h2>More Content Below</h2>
-        <p>This content is only reachable once the game is finished and scrolling is unlocked.</p>
     </div>
 
 <script>
@@ -105,11 +60,7 @@ const startScreen = document.getElementById('start-screen'), resultsScreen = doc
 const streakCountEl = document.getElementById('streak-count'), streakInfo = document.getElementById('streak-info');
 const startBtn = document.getElementById('start-btn'), startMsg = document.getElementById('start-msg');
 
-// Fixed size resize
-function resize() { 
-    canvas.width = 1080; 
-    canvas.height = 1400; 
-}
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 window.addEventListener('resize', resize);
 resize();
 
@@ -127,9 +78,9 @@ if (lastPlayed === today) {
     startMsg.innerText = "Neural pathway closed for maintenance. Come back tomorrow!";
 }
 
-for(let i=0; i<80; i++) stars.push({ x: Math.random()*1080, y: Math.random()*1400, s: 1 + Math.random()*3 });
+for(let i=0; i<80; i++) stars.push({ x: Math.random()*2000, y: Math.random()*2000, s: 1 + Math.random()*3 });
 
-const player = { x: 540, y: 1320, w: 80, h: 50 };
+const player = { x: window.innerWidth / 2, y: 0, w: 80, h: 50 };
 const enemyTypes = [{ label: '☄️', p: 10, penalty: 15 }, { label: '📱', p: 20, penalty: 20 }, { label: '🔔', p: 10, penalty: 10 }];
 
 const ranks = [
@@ -141,14 +92,12 @@ const ranks = [
 ];
 
 function startGame() {
-    document.body.classList.add('playing'); // LOCKS SCROLLING
-    localStorage.setItem('smash_last_played', today); 
+    localStorage.setItem('smash_last_played', today); // Lock for the day
     startScreen.style.display = 'none';
     ui.style.display = 'block';
     timerEl.style.display = 'block';
     gameActive = true;
     spawnEnemy(); spawnBullet(); startTimer();
-    draw();
 }
 
 function spawnBullet() {
@@ -164,9 +113,21 @@ function spawnEnemy() {
     setTimeout(spawnEnemy, 850 / (isHyper ? 2 : difficulty));
 }
 
+function activateHyper() {
+    isHyper = true;
+    streakInfo.innerText = "NEURAL STREAK ACTIVE!";
+    streakInfo.style.color = "#fff";
+    setTimeout(() => { 
+        isHyper = false; 
+        streak = 0; 
+        streakInfo.innerHTML = 'STREAK: <span id="streak-count">0</span>/15';
+        streakInfo.style.color = "#ffcc00";
+    }, 5000);
+}
+
 function startTimer() {
     const clock = setInterval(() => {
-        if(!gameActive) { clearInterval(clock); return; }
+        if(!gameActive) return;
         timeLeft--;
         timerEl.innerText = timeLeft + "s";
         if (timeLeft % 10 === 0) difficulty += 0.2;
@@ -176,7 +137,6 @@ function startTimer() {
 
 function endGame() {
     gameActive = false;
-    document.body.classList.remove('playing'); // UNLOCKS SCROLLING
     ui.style.display = 'none';
     timerEl.style.display = 'none';
     const info = getRankInfo(score);
@@ -196,31 +156,20 @@ function getRankInfo(s) {
     return { current, next };
 }
 
-// Convert screen touch/mouse to internal 1080 canvas coordinates
-function getRelativeX(clientX) {
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    return (clientX - rect.left) * scaleX;
-}
-
-window.addEventListener('mousemove', (e) => { if(gameActive) player.x = getRelativeX(e.clientX); });
-window.addEventListener('touchmove', (e) => { 
-    if(gameActive) { 
-        e.preventDefault(); 
-        player.x = getRelativeX(e.touches[0].clientX); 
-    } 
-}, {passive: false});
+window.addEventListener('mousemove', (e) => { if(gameActive) player.x = e.clientX; });
+window.addEventListener('touchmove', (e) => { if(gameActive) { e.preventDefault(); player.x = e.touches[0].clientX; } }, {passive: false});
 
 function draw() {
     ctx.fillStyle = '#05080c';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    player.y = canvas.height - 80;
 
     stars.forEach(s => {
         s.y += isHyper ? s.s * 8 : s.s; if(s.y > canvas.height) s.y = 0;
         ctx.fillStyle = '#fff'; ctx.fillRect(s.x % canvas.width, s.y, 1.5, 1.5);
     });
 
-    if(!gameActive) { if(resultsScreen.style.display === 'flex') requestAnimationFrame(draw); return; }
+    if(!gameActive) { requestAnimationFrame(draw); return; }
 
     bullets.forEach((b, i) => {
         b.y -= 15; ctx.fillStyle = isHyper ? '#ffcc00' : '#00ffcc';
@@ -231,7 +180,6 @@ function draw() {
     enemies.forEach((e, i) => {
         e.y += e.speed; ctx.font = '40px Arial'; ctx.fillText(e.type.label, e.x, e.y);
         
-        // Bullet collision
         bullets.forEach((b, bi) => {
             if(b.x > e.x && b.x < e.x + 40 && b.y > e.y - 40 && b.y < e.y) {
                 score += e.type.p;
@@ -251,7 +199,6 @@ function draw() {
         }
     });
 
-    // Draw Ship
     ctx.fillStyle = '#00ffcc';
     ctx.beginPath();
     ctx.moveTo(player.x, player.y);
@@ -261,14 +208,6 @@ function draw() {
 
     requestAnimationFrame(draw);
 }
-
-function activateHyper() {
-    isHyper = true;
-    streakInfo.innerText = "NEURAL STREAK ACTIVE!";
-    setTimeout(() => { isHyper = false; streak = 0; streakInfo.innerText = "STREAK: 0/15"; }, 5000);
-}
-
-// Initial draw call for background stars
 draw();
 </script>
 </body>
